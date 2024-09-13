@@ -79,7 +79,7 @@ def load_data(sf, downchirp):
     for root, dirs, file_in_dir in os.walk(os.path.join(data_dir, str(sf))):
         for filename in file_in_dir:
             if filename.endswith('.csv') or 'wrong' in filename: continue
-            truth_idx = int(filename.split('_')[1])
+            truth_idx = int(filename.split('_')[1]) % num_classes
             files[truth_idx].append(os.path.join(root, filename))
 
     # read file contents
