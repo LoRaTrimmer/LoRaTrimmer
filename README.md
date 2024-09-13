@@ -8,7 +8,7 @@ Usage:
 3. Set the dataset path in main.py to your unzipped location:
    
     ```python
-    data_dir = '/path/to/NeLoRa_Dataset/'
+    data_dir = '/kaggle/input/nelora-bench/NeLoRa_Dataset'  # directory for training dataset
     ```
 5. Run main.py to plot accuracy comparison of the methods LoRaTrimmer and LoRaPhy on SF 7 to 10. Because we run two methods on the full dataset (around `27,000` symbols), it takes about 1.5 hours with GPU and 3 hours without. There will be progress bars for each SF for reading files and running (8 bars in total). You can reduce run time by either modifying the range of tested SNR at
 

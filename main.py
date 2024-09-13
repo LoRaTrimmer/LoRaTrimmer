@@ -3,15 +3,17 @@ import math
 import random
 
 try:
-    import cupy as cp
-    from cupyx.scipy.fft import fft as cp_fft
-    from cupyx.scipy.signal import chirp as cp_chirp
+    import cupy as np
+    from cupyx.scipy.fft import fft as np_fft
+    from cupyx.scipy.signal import chirp as np_chirp
     GPU_AVAILABLE = True
+    print('Using GPU')
 except ImportError:
     import numpy as np
     from scipy.signal import chirp as np_chirp
     from scipy.fft import fft as np_fft
     GPU_AVAILABLE = False
+    print('Using CPU')
 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -22,7 +24,7 @@ random.seed(10)
 
 bw = 125e3  # bandwidth
 fs = 1e6  # sampling frequency
-data_dir = '/path/to/NeLoRa_Dataset'  # directory for training dataset
+data_dir = '/kaggle/input/nelora-bench/NeLoRa_Dataset'  # directory for training dataset
 assert os.path.exists(data_dir), 'NeLoRa_Dataset directory does not exist'
 
 snr_range = list(range(-40, -10))  # range of SNR for training
@@ -43,10 +45,8 @@ def decode_loraphy(data_in, num_classes, downchirp):
     chirp_data = data_in * downchirp
 
     # compute FFT
-    if GPU_AVAILABLE:
-        fft_raw = cp_fft(chirp_data, len(chirp_data) * upsampling)
-    else:
-        fft_raw = np_fft(chirp_data, len(chirp_data) * upsampling)
+    
+    fft_raw = np_fft(chirp_data, len(chirp_data) * upsampling)
 
     # cut the FFT results to two (due to upsampling)
     target_nfft = num_classes * upsampling
@@ -54,8 +54,7 @@ def decode_loraphy(data_in, num_classes, downchirp):
     cut2 = fft_raw[-target_nfft:]
 
     # add absolute values of cut1 and cut2 to merge two peaks into one
-    return round(cp.argmax(cp.abs(cut1) + cp.abs(cut2)) / upsampling) % num_classes if GPU_AVAILABLE else\
-        round(np.argmax(np.abs(cut1) + np.abs(cut2)) / upsampling) % num_classes
+    return round((np.argmax(np.abs(cut1) + np.abs(cut2)) / upsampling).item()) % num_classes 
 
 
 # adding noise for data
@@ -106,15 +105,10 @@ def gen_constants(sf):
 
     # generate downchirp
     t = np.linspace(0, num_samples / fs, num_samples + 1)[:-1]
-    if GPU_AVAILABLE:
-        chirpI1 = cp_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=90)
-        chirpQ1 = cp_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=0)
-        downchirp = chirpI1 + 1j * chirpQ1
-    else:
-        chirpI1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=90)
-        chirpQ1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=0)
-        downchirp = chirpI1 + 1j * chirpQ1
-
+    
+    chirpI1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=90)
+    chirpQ1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=0)
+    downchirp = chirpI1 + 1j * chirpQ1
     # two DFT matrices
     dataE1 = np.zeros((num_classes, num_samples), dtype=np.complex64)
     dataE2 = np.zeros((num_classes, num_samples), dtype=np.complex64)
@@ -124,27 +118,16 @@ def gen_constants(sf):
         dataE1[symbol_index][:time_split] = downchirp[time_shift:]
         if symbol_index != 0: dataE2[symbol_index][time_split:] = downchirp[:time_shift]
 
-    if GPU_AVAILABLE:
-        dataE1 = cp.array(dataE1)
-        dataE2 = cp.array(dataE2)
-
     return downchirp, dataE1, dataE2
 
 
 def decode_ours(dataX, dataE1, dataE2):
-    if GPU_AVAILABLE:
-        dataX = cp.array(dataX).T
-        data1 = cp.matmul(dataE1, dataX)
-        data2 = cp.matmul(dataE2, dataX)
-        vals = cp.abs(data1) ** 2 + cp.abs(data2) ** 2
-        est = cp.argmax(vals).item()
-    else:
-        dataX = np.array(dataX).T
-        data1 = np.matmul(dataE1, dataX)
-        data2 = np.matmul(dataE2, dataX)
-        vals = np.abs(data1) ** 2 + np.abs(data2) ** 2
-        est = np.argmax(vals).item()
-
+    
+    dataX = np.array(dataX).T
+    data1 = np.matmul(dataE1, dataX)
+    data2 = np.matmul(dataE2, dataX)
+    vals = np.abs(data1) ** 2 + np.abs(data2) ** 2
+    est = np.argmax(vals).item()
     return est
 
 
@@ -160,10 +143,12 @@ def generate_plot(vals):
 
     for name in method_names:
         for sf in sfrange:
-            mean_val = [np.mean(vals[name][sf][snr]) if len(vals[name][sf][snr]) else 0 for snr in snr_range]
+            mean_val = np.array([np.mean(np.array(vals[name][sf][snr])) if len(vals[name][sf][snr]) else 0 for snr in snr_range])
+            if GPU_AVAILABLE: mean_val = mean_val.get()
             plt.plot(snr_range, mean_val, label=f'{name}_SF{sf}', color=colors[sf], linestyle=linestyles[name])
 
     plt.legend()
+    plt.show()
     plt.savefig(f'result.png')
     plt.close()
 
@@ -192,3 +177,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
