@@ -1,16 +1,15 @@
 import os
 import math
 import random
+from scipy.signal import chirp as np_chirp
 
 try:
     import cupy as np
     from cupyx.scipy.fft import fft as np_fft
-    from cupyx.scipy.signal import chirp as np_chirp
     GPU_AVAILABLE = True
     print('Using GPU')
-except ImportError:
+except ImportError as e:
     import numpy as np
-    from scipy.signal import chirp as np_chirp
     from scipy.fft import fft as np_fft
     GPU_AVAILABLE = False
     print('Using CPU')
@@ -24,11 +23,11 @@ random.seed(10)
 
 bw = 125e3  # bandwidth
 fs = 1e6  # sampling frequency
-data_dir = '/kaggle/input/nelora-bench/NeLoRa_Dataset'  # directory for training dataset
+data_dir = '/path/to/NeLoRa_Dataset'  # directory for training dataset
 assert os.path.exists(data_dir), 'NeLoRa_Dataset directory does not exist'
 
-snr_range = list(range(-40, -10))  # range of SNR for training
-sfrange = list(range(7, 11))
+snr_range = list(range(-40, -10, 10))  # range of SNR for training
+sfrange = list(range(7, 8))
 method_names = ['LoRaPhy', 'LoRaTrimmer']
 linestyles = dict(zip(method_names, ['--', '-']))
 colors = dict(zip(sfrange,  [(0.8, 0.6, 0.0), (0.0, 0.8, 0.2), (0.0, 0.2, 0.8), (0.8, 0.0, 0.6)][:len(sfrange)]))
@@ -105,9 +104,10 @@ def gen_constants(sf):
 
     # generate downchirp
     t = np.linspace(0, num_samples / fs, num_samples + 1)[:-1]
+    if GPU_AVAILABLE: t = t.get()
     
-    chirpI1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=90)
-    chirpQ1 = np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=0)
+    chirpI1 = np.array(np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=90))
+    chirpQ1 = np.array(np_chirp(t, f0=bw / 2, f1=-bw / 2, t1=2 ** sf / bw, method='linear', phi=0))
     downchirp = chirpI1 + 1j * chirpQ1
     # two DFT matrices
     dataE1 = np.zeros((num_classes, num_samples), dtype=np.complex64)
@@ -177,4 +177,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
